@@ -66,6 +66,10 @@ function fileForXML (cls, meta, loader) {
         case 2: 
           vnode.everyProperty(function (key, prop, props) {
             if (prop) {
+              if (eventName[key]) {
+                prop.name = eventName[key];
+              }
+
               props[key] = prop.stringify();
             }
           });
