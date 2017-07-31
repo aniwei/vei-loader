@@ -51,7 +51,7 @@ function importDeclaration (meta, t, code, classes, path, state, file) {
         /\.(css|less|scss)$/g.test(value);
 
     isStyleSheet ? 
-      meta.styleSheet.set(value, true) : 
+      meta.styleSheets.set(value, true) : 
         path.traverse({
           'ImportDefaultSpecifier': function (path) {
             var node  = path.node;
