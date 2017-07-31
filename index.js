@@ -1,24 +1,46 @@
 var path    = require('path');
+var common  = require('common-dir');
 var ast     = require('./engine/ast/index.js');
-var complie = require('./engine/complie/index.js');
+var compile = require('./engine/compile/index.js');
 var builder = require('./engine/builder/index.js');
 
 
 module.exports = function (source) {
-  var resource = this.resource;
-  var res      = ast(source);
+  var resource    = this.resource;
+  var sourcePath  = this.resourcePath;
+  var compiler    = this._compiler;
+  var options     = this.options;
+  var res         = ast(source);
+  var commonPath;
   var complied;
   var classes;
+  var output;
+  var entry;
+  var keys;
   
+  output      = compiler.outputPath;
+  keys        = Object.getOwnPropertyNames(options.entry);
   
+  keys.some(function (key) {
+    if (options.entry[key] === sourcePath) {
+      return entry = key;
+    }
+  });
+
+  if (!entry) {
+    entry = path.relative(this.query.root, this.context);
+  }
+
   res.meta.filename = resource;
   
-  complied  = complie(res.meta, res.classes);
-  classes   = complied.classes.all();
+  compiled  = compile(res.meta, res.classes);
+  classes   = compiled.classes.all();
+
+  compiled.dist = entry;
 
   classes.forEach((function (cls) {
-    builder.call(this, cls.value, complied);
+    builder.call(this, cls.value, compiled);
   }).bind(this));
   
-  return complied.code;
+  return compiled.code;
 }

@@ -18,7 +18,6 @@ function fileForXML (cls, meta, loader) {
   var vnode         = cls.vnode;
   var file          = meta.filename;
   var className     = kebabcase(cls.className || '');
-  var parsed        = path.parse(file); 
   var rvalue        = /({[\+_\-\*\/~\!\(\)^\&\|\[\]\w\s\?\:,\'\">=<\$]+})/g;
   var replaceValue  = '{{$1}}';
   var imports       = [];
@@ -85,17 +84,28 @@ function fileForXML (cls, meta, loader) {
   var defaultClass = meta.exports.get('default');
   var filename     = defaultClass === cls.className ? 'index' : className;
 
-  fs.writeFileSync(
-    path.join(parsed.dir, `${filename}.wxml`), 
+  loader.emitFile(
+    path.join(meta.dist, `${filename}.wxml`), 
     vnodeString
   );
 
-  vnodeString = `<template name="${className}">${vnodeString}</template>`
 
-  fs.writeFileSync(
-    path.join(parsed.dir, `${filename}.view.wxml`), 
+  // fs.writeFileSync(
+  //   path.join(meta.dist, `${filename}.wxml`), 
+  //   vnodeString
+  // );
+
+  vnodeString = `<template name="${className}">${vnodeString}</template>`;
+
+  loader.emitFile(
+    path.join(meta.dist, `${filename}.view.wxml`), 
     vnodeString
   );
+
+  // fs.writeFileSync(
+  //   path.join(meta.dist, `${filename}.view.wxml`), 
+  //   vnodeString
+  // );
 }
 
 function stringify (props) {
