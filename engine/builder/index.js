@@ -93,23 +93,12 @@ function fileForXML (cls, meta, loader) {
     vnodeString
   );
 
-
-  // fs.writeFileSync(
-  //   path.join(meta.dist, `${filename}.wxml`), 
-  //   vnodeString
-  // );
-
   vnodeString = `<template name="${className}">${vnodeString}</template>`;
 
   loader.emitFile(
     path.join(meta.dist, `${filename}.view.wxml`), 
     vnodeString
   );
-
-  // fs.writeFileSync(
-  //   path.join(meta.dist, `${filename}.view.wxml`), 
-  //   vnodeString
-  // );
 }
 
 function stringify (props) {

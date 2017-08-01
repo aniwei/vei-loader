@@ -1,6 +1,6 @@
 {
   "name": "vei-loader",
-  "version": "0.0.12",
+  "version": "0.0.13",
   "description": "vei-loader",
   "main": "index.js",
   "scripts": {
@@ -12,6 +12,7 @@
     "babel-core": "^6.25.0",
     "common-dir": "^1.0.1",
     "esutils": "^2.0.2",
+    "he": "^1.1.1",
     "lodash.kebabcase": "^4.1.1",
     "vei-vdom": "0.0.11"
   }

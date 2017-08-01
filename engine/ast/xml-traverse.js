@@ -1,5 +1,6 @@
 var path          = require('path');
 var esutils       = require('esutils');
+var he            = require('he');
 var Meta          = require('./meta-class');
 var tagName       = require('../tag/name');
 var eventName     = require('../tag/event');
@@ -7,6 +8,7 @@ var VNode         = require('vei-vdom').VirtualNode;
 var VText         = require('vei-vdom').VirtualText;
 var VJSX          = require('vei-vdom').VirtualJSX;
 var VProp         = require('vei-vdom').VirtualProp;
+var vid           = require('../vid');
 var parse         = path.parse;
 var resolve       = path.resolve;
 var cid           = 0;
@@ -60,8 +62,8 @@ function importDeclaration (meta, t, code, classes, path, state, file) {
             meta.imports.set(name, {
               relative: value
             });
-          },
-          'JSXElement':  jSXElement.apply(null, argv)
+          }
+          //'JSXElement':  jSXElement.apply(null, argv)
         });
   }
 }
@@ -125,6 +127,7 @@ function jSXElementToVnode (cls, meta, t, code, classes, path, state, file) {
     var name;
     var props;
     var dep;
+    var viewid;
 
     if (children) {
       if (children.length > 0) {
@@ -151,6 +154,17 @@ function jSXElementToVnode (cls, meta, t, code, classes, path, state, file) {
 
         if (!tagName[name]) {
           dep = meta.imports.get(name);
+
+          props.__viewid__ = new VProp('__viewid__', { type: 'literal', value: viewid = vid.vid });
+
+          opening.attributes.push(
+            t.jSXAttribute(
+              t.jSXIdentifier(
+                '__viewid__'
+              ),
+              t.stringLiteral(String(viewid))
+            )
+          );
 
           cls.dependencies.set(name, dep);  
         }
@@ -184,6 +198,10 @@ function jSXElementToVnode (cls, meta, t, code, classes, path, state, file) {
         if (eventName[name]) {
           cls.classEventMethods.set(name, value);
         }        
+      }
+
+      if (t.isStringLiteral(attr.value)) {
+        attr.value.value = he.encode(attr.value.value);
       }
     });
 
@@ -234,140 +252,141 @@ function jSXElementToVnode (cls, meta, t, code, classes, path, state, file) {
   }
 }
 
-function jSXElement (meta, t, complete, code, classes, path, state, file) {
+// function jSXElement (meta, t, complete, code, classes, path, state, file) {
   
-  function toJSXIdentifier (node, parent) {
-    if (t.isJSXIdentifier(node)) {
-      if (node.name === 'this' && t.isReferenced(node, parent)) {
-        return t.thisExpression();
-      } else if (esutils.keyword.isIdentifierNameES6(node.name)) {
-        node.type = 'Identifier'
-      } else {
-        return t.stringLiteral(node.name)
-      }
-    } else if (t.isJSXMemberExpression(node)) {
-      return t.memberExpression(
-        toJSXIdentifier(node.object, node),
-        toJSXIdentifier(node.property, node)
-      )
-    }
+//   function toJSXIdentifier (node, parent) {
+//     if (t.isJSXIdentifier(node)) {
+//       if (node.name === 'this' && t.isReferenced(node, parent)) {
+//         return t.thisExpression();
+//       } else if (esutils.keyword.isIdentifierNameES6(node.name)) {
+//         node.type = 'Identifier'
+//       } else {
+//         return t.stringLiteral(node.name)
+//       }
+//     } else if (t.isJSXMemberExpression(node)) {
+//       return t.memberExpression(
+//         toJSXIdentifier(node.object, node),
+//         toJSXIdentifier(node.property, node)
+//       )
+//     }
 
-    return node;
-  }
+//     return node;
+//   }
 
-  function toAttributeValue (node) {
-    return t.isJSXExpressionContainer(node) ?
-      node.expression : node;
-  }
+//   function toAttributeValue (node) {
+//     return t.isJSXExpressionContainer(node) ?
+//       node.expression : node;
+//   }
 
-  function toAttribute (node) {
-    const value = toAttributeValue(node.value || t.booleanLiteral(true));
+//   function toAttribute (node) {
+//     const value = toAttributeValue(node.value || t.booleanLiteral(true));
 
-    if (t.isStringLiteral(value) && !t.isJSXExpressionContainer(node.value)) {
-      value.value = value.value.replace(/\n\s+/g, ' ');
-    }
+//     if (t.isStringLiteral(value) && !t.isJSXExpressionContainer(node.value)) {
+//       value.value = value.value.replace(/\n\s+/g, ' ');
+//     }
 
-    if (t.isValidIdentifier(node.name.name)) {
-      node.name.type = 'Identifier';
-    } else {
-      node.name = t.stringLiteral(node.name.name);
-    }
+//     if (t.isValidIdentifier(node.name.name)) {
+//       node.name.type = 'Identifier';
+//     } else {
+//       node.name = t.stringLiteral(node.name.name);
+//     }
 
-    return t.inherits(t.objectProperty(node.name, value), node);
-  }
+//     return t.inherits(t.objectProperty(node.name, value), node);
+//   }
 
-  function toJSXAttribute (attributes, file) { 
-    let props = [];
-    const objects = [];
+//   function toJSXAttribute (attributes, file) { 
+//     let props = [];
+//     const objects = [];
 
-    const useBuiltIns = file.opts.useBuiltIns || false;
-    if (typeof useBuiltIns !== 'boolean') {
-      throw new Error(`transform-react-jsx currently only accepts a boolean option for " +
-        "useBuiltIns (defaults to false)`);
-    }
+//     const useBuiltIns = file.opts.useBuiltIns || false;
+//     if (typeof useBuiltIns !== 'boolean') {
+//       throw new Error(`transform-react-jsx currently only accepts a boolean option for " +
+//         "useBuiltIns (defaults to false)`);
+//     }
 
-    function pushProps() {
-      if (!props.length) {
-        return;
-      }
+//     function pushProps() {
+//       if (!props.length) {
+//         return;
+//       }
 
-      objects.push(t.objectExpression(props));
-      props = [];
-    }
+//       objects.push(t.objectExpression(props));
+//       props = [];
+//     }
 
-    while (attributes.length) {
-      const prop = attributes.shift();
+//     while (attributes.length) {
+//       const prop = attributes.shift();
 
-      if (t.isJSXSpreadAttribute(prop)) {
-        pushProps();
-        objects.push(prop.argument);
-      } else {
-        props.push(toAttribute(prop));
-      }
-    }
+//       if (t.isJSXSpreadAttribute(prop)) {
+//         pushProps();
+//         objects.push(prop.argument);
+//       } else {
+//         props.push(toAttribute(prop));
+//       }
+//     }
 
-    pushProps();
+//     pushProps();
 
-    if (objects.length === 1) {
-      // only one object
-      attributes = objects[0];
-    } else {
-      // looks like we have multiple objects
-      if (!t.isObjectExpression(objs[0])) {
-        objects.unshift(t.objectExpression([]));
-      }
+//     if (objects.length === 1) {
+//       // only one object
+//       attributes = objects[0];
+//     } else {
+//       // looks like we have multiple objects
+//       if (!t.isObjectExpression(objs[0])) {
+//         objects.unshift(t.objectExpression([]));
+//       }
 
-      const helper = useBuiltIns ?
-        t.memberExpression(t.identifier('Object'), t.identifier('assign')) :
-        file.addHelper('extends');
+//       const helper = useBuiltIns ?
+//         t.memberExpression(t.identifier('Object'), t.identifier('assign')) :
+//         file.addHelper('extends');
 
-      // spread it
-      attributes = t.callExpression(helper, objects);
-    }
+//       // spread it
+//       attributes = t.callExpression(helper, objects);
+//     }
 
-    return attributes;   
-  }
+//     return attributes;   
+//   }
 
-  return {
-    exit: function (path) {
-      var opening     = path.get('openingElement'); 
-      var argument    = [];
-      var attributes  = opening.node.attributes;
-      var propExpr;
-      var tagExpr;
-      var callExpr;
-      var tagName;
+//   return {
+//     exit: function (path) {
+//       var opening     = path.get('openingElement'); 
+//       var argument    = [];
+//       var attributes  = opening.node.attributes;
+//       var propExpr;
+//       var tagExpr;
+//       var callExpr;
+//       var tagName;
 
-      opening.parent.children = t.react.buildChildren(opening.parent);
-      tagExpr              = toJSXIdentifier(opening.node.name, opening.node);
+//       opening.parent.children = t.react.buildChildren(opening.parent);
+//       tagExpr              = toJSXIdentifier(opening.node.name, opening.node);
       
-      tagName = t.isIdentifier(tagExpr) ?
-        tagExpr.name : tagExpr.value;
+//       tagName = t.isIdentifier(tagExpr) ?
+//         tagExpr.name : tagExpr.value;
       
-      argument.push(
-        t.react.isCompatTag(tagName) ? 
-          t.stringLiteral(tagName) : tagExpr
-      );
+//       argument.push(
+//         t.react.isCompatTag(tagName) ? 
+//           t.stringLiteral(tagName) : tagExpr
+//       );
       
-      propExpr = attributes.length > 0 ? 
-        toJSXAttribute(attributes, file) : t.nullLiteral();
-      
-      argument.push(
-        propExpr,
-        t.arrayExpression(path.node.children)
-      );
+//       propExpr = attributes.length > 0 ? 
+//         toJSXAttribute(attributes, file) : t.nullLiteral();
 
-      tagExpr = t.callExpression(
-        t.identifier('createElement'),
-        argument
-      );
+      
+//       argument.push(
+//         propExpr,
+//         t.arrayExpression(path.node.children)
+//       );
 
-      path.replaceWith(
-        t.inherits(
-          tagExpr,
-          path.node
-        )
-      );
-    }
-  }
-}
+//       tagExpr = t.callExpression(
+//         t.identifier('createElement'),
+//         argument
+//       );
+
+//       path.replaceWith(
+//         t.inherits(
+//           tagExpr,
+//           path.node
+//         )
+//       );
+//     }
+//   }
+// }

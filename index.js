@@ -1,5 +1,4 @@
 var path    = require('path');
-var common  = require('common-dir');
 var ast     = require('./engine/ast/index.js');
 var compile = require('./engine/compile/index.js');
 var builder = require('./engine/builder/index.js');

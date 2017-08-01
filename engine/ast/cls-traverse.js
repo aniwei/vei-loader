@@ -1,15 +1,4 @@
-var path          = require('path');
-var esutils       = require('esutils');
-var Meta          = require('./meta-class');
-var tagName       = require('../tag/name');
 var eventName     = require('../tag/event');
-var VNode         = require('vei-vdom').VirtualNode;
-var VText         = require('vei-vdom').VirtualText;
-var VJSX          = require('vei-vdom').VirtualJSX;
-var VProp         = require('vei-vdom').VirtualProp;
-var parse         = path.parse;
-var resolve       = path.resolve;
-var cid           = 0;
 
 
 module.exports = function (path, state, t, meta, classes) {
@@ -35,6 +24,7 @@ function classDeclaration (meta, t, code, classes, path, state, file) {
     var node;
     var paramExpr;
     var bodyExpr;
+    var callExpr;
     var exist = body.some(function (node) {
       var key = node.key;
 
@@ -48,12 +38,23 @@ function classDeclaration (meta, t, code, classes, path, state, file) {
     if (!exist) {
       paramExpr = [
         t.identifier('props'),
-        t.identifier('context'),
-        t.identifier('host'),
+        t.identifier('context')
       ];
 
+      callExpr = t.CallExpression(
+        t.super(),
+        [
+          t.identifier('props'),
+          t.identifier('context')
+        ]
+      );
+
       bodyExpr = t.blockStatement(
-        []
+        [
+          t.expressionStatement(
+            callExpr
+          )
+        ]
       );
 
       node = t.classMethod(
@@ -122,19 +123,19 @@ function classMethod (cls, meta, t) {
     if (vnode) {
       vnode.map(function (v) {
         var props;
+        var viewid;
 
         if (v.vtype < 11) {
-          props = v.allProperties() || [];
+          props   = v.allProperties() || [];
 
           if (props.length > 0) {
             props.forEach(function (prop) {
               var name      = prop.key;
               var valueNode = prop.value;
               var value     = valueNode.stringify();
-
               
               if (eventName[name]) {
-                valueNode.value.value = `${cls.cid}.${value}`;
+                valueNode.value.value = `${cls.cid}.{{__viewid__}}.${value}`;
               }
             });
           }

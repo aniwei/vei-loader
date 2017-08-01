@@ -1,8 +1,12 @@
 var path    = require('path');
 var esutils = require('esutils');
+var he      = require('he');
+var tagName = require('../tag/name');
 var Meta    = require('../ast/meta-class');
+var vid     = require('../vid');
 var parse   = path.parse;
 var join    = path.join;
+
 
 module.exports = function (path, state, t, meta, classes) {
   return createVisitor(path, state, t, meta, classes);
@@ -101,7 +105,8 @@ function jSXElement (t, file) {
   }
 
   function toAttribute (node) {
-    const value = toAttributeValue(node.value || t.booleanLiteral(true));
+    var value = toAttributeValue(node.value || t.booleanLiteral(true));
+    var string;
 
     if (t.isStringLiteral(value) && !t.isJSXExpressionContainer(node.value)) {
       value.value = value.value.replace(/\n\s+/g, ' ');
@@ -172,6 +177,28 @@ function jSXElement (t, file) {
     return attributes;   
   }
 
+  function isExistProperty (attributes) {
+    var isExist = attributes.some(function (attr) {
+      var node = attr.name;
+      var name = node.name;
+
+      if (name === '__viewid__') {
+        return true;
+      }
+    });
+
+    if (!isExist) {
+      attributes.push(
+        t.jSXAttribute(
+          t.jSXIdentifier(
+            '__viewid__'
+          ),
+          t.stringLiteral(String(vid.vid))
+        )
+      );
+    }
+  }
+
   return {
     exit: function (path) {
       var opening     = path.get('openingElement'); 
@@ -180,19 +207,23 @@ function jSXElement (t, file) {
       var propExpr;
       var tagExpr;
       var callExpr;
-      var tagName;
+      var tag;
 
       opening.parent.children = t.react.buildChildren(opening.parent);
       tagExpr              = toJSXIdentifier(opening.node.name, opening.node);
       
-      tagName = t.isIdentifier(tagExpr) ?
+      tag = t.isIdentifier(tagExpr) ?
         tagExpr.name : tagExpr.value;
       
       argument.push(
-        t.react.isCompatTag(tagName) ? 
-          t.stringLiteral(tagName) : tagExpr
+        t.react.isCompatTag(tag) ? 
+          t.stringLiteral(tag) : tagExpr
       );
       
+      if (!tagName[tag]) {
+        isExistProperty(attributes);
+      }
+
       propExpr = attributes.length > 0 ? 
         toJSXAttribute(attributes, file) : t.nullLiteral();
       
@@ -203,10 +234,6 @@ function jSXElement (t, file) {
       argument.push(
         t.arrayExpression(path.node.children)
       );
-
-      argument.push(
-        t.thisExpression()
-      )
 
       tagExpr = t.callExpression(
         t.identifier('createElement'),
