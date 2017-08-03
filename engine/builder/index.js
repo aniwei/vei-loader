@@ -68,6 +68,7 @@ function fileForXML (cls, meta, loader) {
             if (prop) {
               if (eventName[key]) {
                 prop.name = eventName[key];
+                prop.value.value = `{{__viewid__}}.${prop.value.value}`;
               }
 
               props[key] = prop.stringify();

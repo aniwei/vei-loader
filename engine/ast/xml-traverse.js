@@ -1,392 +1,205 @@
-var path          = require('path');
-var esutils       = require('esutils');
-var he            = require('he');
-var Meta          = require('./meta-class');
-var tagName       = require('../tag/name');
-var eventName     = require('../tag/event');
-var VNode         = require('vei-vdom').VirtualNode;
-var VText         = require('vei-vdom').VirtualText;
-var VJSX          = require('vei-vdom').VirtualJSX;
-var VProp         = require('vei-vdom').VirtualProp;
-var vid           = require('../vid');
-var parse         = path.parse;
-var resolve       = path.resolve;
-var cid           = 0;
+var path    = require('path');
+var esutils = require('esutils');
+var he      = require('he');
+var tagName = require('../tag/name');
+var Meta    = require('../ast/meta-class');
+var parse   = path.parse;
+var join    = path.join;
 
 
-module.exports = function (path, state, t, meta, classes) {
-  return createVisitor(path, state, t, meta, classes);
+module.exports = function (path, state, t, meta) {
+  return createVisitor(path, state, t, meta);
 }
 
-function createVisitor(path, state, t, meta, classes) {
+function createVisitor (path, state, types, meta) {
   var file      = state.file;
   var code      = file.code;
 
-  var argv = [meta, t, code, classes, path, state, file];
+  var argv = [types, file];
 
   return {
-    'ExportDefaultDeclaration': exportDefaultDeclaration.apply(null, argv),
-    'ImportDeclaration':        importDeclaration.apply(null, argv),
-    'ClassDeclaration':         classDeclaration.apply(null, argv) 
-  };
-}
-
-function exportDefaultDeclaration (meta) {
-  return function (path) {
-    var node        = path.node;
-    var declaration = node.declaration;
-
-    if (declaration.type === 'ClassDeclaration') {
-      meta.exports.set('default', declaration.id.name);
-    }
+    'JSXElement': jSXElement.apply(null, argv)
   }
 }
 
-function importDeclaration (meta, t, code, classes, path, state, file) {
-  var argv = arguments;
-
-
-  return function (path) {
-    var node  = path.node;
-    var value = node.source.value;
-    var isStyleSheet = node.specifiers.length === 0 &&
-        /\.(css|less|scss)$/g.test(value);
-
-    isStyleSheet ? 
-      meta.styleSheets.set(value, true) : 
-        path.traverse({
-          'ImportDefaultSpecifier': function (path) {
-            var node  = path.node;
-            var name  = node.local.name;
-
-            meta.imports.set(name, {
-              relative: value
-            });
-          }
-          //'JSXElement':  jSXElement.apply(null, argv)
-        });
-  }
-}
-
-function classDeclaration (meta, t, code, classes, path, state, file) {
+function classDeclaration (meta) {
   var argv = Array.prototype.slice.call(arguments);
-
-  return function (path) {
-    var node = path.node;
-    var name = node.id.name;
-    var date = (+new Date() + '').slice(-8);
-    var cls  = {
-      cid:                date,
-      className:          name,
-      superClass:         node.superClass ? node.superClass.name : null,
-      classProperties:    new Meta.Node(),
-      classMethods:       new Meta.Node(),
-      classEventMethods:  new Meta.Node()
-    };
-
-    meta.classes.set(name, cls);
-    classes.set(`${name}_${date}`, cls);
-
-    // argv.unshift(cls);
-
-    path.traverse({
-      'ClassMethod': classMethod.apply(null, [cls].concat(argv))
-    });
-  }
-}
-
-function classMethod (cls, meta) {
-  var argv = arguments;
-
-  return function (path) {
-    var node = path.node;
-    var body = node.body.body;
-    var name = node.key.name;
-
-    path.traverse({
-      'JSXElement': jSXElementToVnode.apply(null, argv)
-    });
-
-    cls.classMethods.set(name, true);
-  }
-}
-
-function jSXElementToVnode (cls, meta, t, code, classes, path, state, file) {
-  var rvalue        = /({[\+_\-\*\/~\!\(\)^\&\|\[\]\w\s\?\:,\'\">=<\$]+})/g;
-  var replaceValue  = '{$1}';
-
-  cls.dependencies = new Meta.Node();
-  cls.jsx          = {
-    props: new Meta.Node()
-  }
-
-  function toVnode (node) {
-    var children = node.children;
-    var opening;
-    var value;
-    var name;
-    var props;
-    var dep;
-    var viewid;
-
-    if (children) {
-      if (children.length > 0) {
-        children = children.map(function (node) {
-          return toVnode(node);
-        });
-      }
-    }
-
-    switch (node.type) {
-      case 'JSXExpressionContainer':
-        return new VJSX(node.expression.name);
-
-        break;
-      case 'JSXText':
-        value = node.value || '';
-        
-        return new VText(value/*value.replace(rvalue, replaceValue)*/);
-
-      case 'JSXElement':
-        opening = node.openingElement;
-        name    = opening.name.name;
-        props   = toProps(opening);
-
-        if (!tagName[name]) {
-          dep = meta.imports.get(name);
-
-          props.__viewid__ = new VProp('__viewid__', { type: 'literal', value: viewid = vid.vid });
-
-          opening.attributes.push(
-            t.jSXAttribute(
-              t.jSXIdentifier(
-                '__viewid__'
-              ),
-              t.stringLiteral(String(viewid))
-            )
-          );
-
-          cls.dependencies.set(name, dep);  
-        }
-
-        return new VNode(name, props, children, 1);
-    }
-  }
-
-  function toProps (node) {
-    var attributes = node.attributes;
-    var props      = {};
-
-    attributes.forEach(function (attr) {
-      var name;
-      var value;
-
-      if (attr.type === 'JSXAttribute') {
-        if (attr.name.namespace) {
-          name  = attr.name.namespace.name + ':' + attr.name.name.name;
-        } else {
-          name  = attr.name.name;
-        }
-
-        value = attr.value;
-
-        name        = eventName[name] || name;
-        value       = toValue(value);
-
-        props[name] = new VProp(name, value);
-
-        if (eventName[name]) {
-          cls.classEventMethods.set(name, value);
-        }        
-      }
-
-      if (t.isStringLiteral(attr.value)) {
-        attr.value.value = he.encode(attr.value.value);
-      }
-    });
-
-    return props;
-  }
-
-  function toValue (node) {
-    var value;
-    var expr;
-
-    switch (node.type) {
-      case 'JSXExpressionContainer':
-        expr = node.expression;
-
-        if (
-          expr.type === 'Identifier'      ||
-          expr.type === 'BooleanLiteral'  ||
-          expr.type === 'NumericLiteral'  ||
-          expr.type === 'NullLiteral'     ||
-          expr.type === 'RegExpLiteral'   ||
-          expr.type === 'BooleanLiteral'
-        ) {
-          return {
-            type:   'identifier',
-            value:  expr.value || expr.name
-          }
-        }
-        
-        return {
-          type:   'identifier',
-          value:  code.slice(expr.start, expr.end)
-        }
-        break;
-      default:
-        return {
-          type:   'literal',
-          value:  node.value
-        }
-    }
-
-    return value /*value.replace(rvalue, replaceValue)*/;
-  }
-
-  return function (path) {
-    if (!cls.vnode) {
-      cls.vnode = toVnode(path.node);
-    }
-  }
-}
-
-// function jSXElement (meta, t, complete, code, classes, path, state, file) {
   
-//   function toJSXIdentifier (node, parent) {
-//     if (t.isJSXIdentifier(node)) {
-//       if (node.name === 'this' && t.isReferenced(node, parent)) {
-//         return t.thisExpression();
-//       } else if (esutils.keyword.isIdentifierNameES6(node.name)) {
-//         node.type = 'Identifier'
-//       } else {
-//         return t.stringLiteral(node.name)
-//       }
-//     } else if (t.isJSXMemberExpression(node)) {
-//       return t.memberExpression(
-//         toJSXIdentifier(node.object, node),
-//         toJSXIdentifier(node.property, node)
-//       )
-//     }
+  return function (path) {
+    var node = path.node;
+    var cls  = meta.classes.get(node.id.name);
+    var body = node.body.body;
+  
+    if (cls) {
+      path.traverse({
+        'JSXElement': jSXElement.apply(null, argv)
+      });
+    }
+  }
+}
 
-//     return node;
-//   }
+function jSXElement (t, file) {
+  
+  function toJSXIdentifier (node, parent) {
+    if (t.isJSXIdentifier(node)) {
+      if (node.name === 'this' && t.isReferenced(node, parent)) {
+        return t.thisExpression();
+      } else if (esutils.keyword.isIdentifierNameES6(node.name)) {
+        node.type = 'Identifier'
+      } else {
+        return t.stringLiteral(node.name)
+      }
+    } else if (t.isJSXMemberExpression(node)) {
+      return t.memberExpression(
+        toJSXIdentifier(node.object, node),
+        toJSXIdentifier(node.property, node)
+      )
+    }
 
-//   function toAttributeValue (node) {
-//     return t.isJSXExpressionContainer(node) ?
-//       node.expression : node;
-//   }
+    return node;
+  }
 
-//   function toAttribute (node) {
-//     const value = toAttributeValue(node.value || t.booleanLiteral(true));
+  function toAttributeValue (node) {
+    return t.isJSXExpressionContainer(node) ?
+      node.expression : node;
+  }
 
-//     if (t.isStringLiteral(value) && !t.isJSXExpressionContainer(node.value)) {
-//       value.value = value.value.replace(/\n\s+/g, ' ');
-//     }
+  function toAttribute (node) {
+    var value = toAttributeValue(node.value || t.booleanLiteral(true));
+    var string;
 
-//     if (t.isValidIdentifier(node.name.name)) {
-//       node.name.type = 'Identifier';
-//     } else {
-//       node.name = t.stringLiteral(node.name.name);
-//     }
+    if (t.isStringLiteral(value) && !t.isJSXExpressionContainer(node.value)) {
+      value.value = value.value.replace(/\n\s+/g, ' ');
+    }
 
-//     return t.inherits(t.objectProperty(node.name, value), node);
-//   }
+    if (t.isValidIdentifier(node.name.name)) {
+      node.name.type = 'Identifier';
+    } else {
+      if (node.name.type === 'JSXNamespacedName') {
+        node.name = t.stringLiteral(node.name.namespace.name + ':' + node.name.name.name);
+      } else {
+        node.name = t.stringLiteral(node.name.name);
+      }
+    }
 
-//   function toJSXAttribute (attributes, file) { 
-//     let props = [];
-//     const objects = [];
+    return t.inherits(t.objectProperty(node.name, value), node);
+  }
 
-//     const useBuiltIns = file.opts.useBuiltIns || false;
-//     if (typeof useBuiltIns !== 'boolean') {
-//       throw new Error(`transform-react-jsx currently only accepts a boolean option for " +
-//         "useBuiltIns (defaults to false)`);
-//     }
+  function toJSXAttribute (attributes, file) { 
+    let props = [];
+    const objects = [];
 
-//     function pushProps() {
-//       if (!props.length) {
-//         return;
-//       }
+    const useBuiltIns = file.opts.useBuiltIns || false;
+    if (typeof useBuiltIns !== 'boolean') {
+      throw new Error(`transform-react-jsx currently only accepts a boolean option for " +
+        "useBuiltIns (defaults to false)`);
+    }
 
-//       objects.push(t.objectExpression(props));
-//       props = [];
-//     }
+    function pushProps() {
+      if (!props.length) {
+        return;
+      }
 
-//     while (attributes.length) {
-//       const prop = attributes.shift();
+      objects.push(t.objectExpression(props));
+      props = [];
+    }
 
-//       if (t.isJSXSpreadAttribute(prop)) {
-//         pushProps();
-//         objects.push(prop.argument);
-//       } else {
-//         props.push(toAttribute(prop));
-//       }
-//     }
+    while (attributes.length) {
+      const prop = attributes.shift();
 
-//     pushProps();
+      if (t.isJSXSpreadAttribute(prop)) {
+        pushProps();
+        objects.push(prop.argument);
+      } else {
+        props.push(toAttribute(prop));
+      }
+    }
 
-//     if (objects.length === 1) {
-//       // only one object
-//       attributes = objects[0];
-//     } else {
-//       // looks like we have multiple objects
-//       if (!t.isObjectExpression(objs[0])) {
-//         objects.unshift(t.objectExpression([]));
-//       }
+    pushProps();
 
-//       const helper = useBuiltIns ?
-//         t.memberExpression(t.identifier('Object'), t.identifier('assign')) :
-//         file.addHelper('extends');
+    if (objects.length === 1) {
+      attributes = objects[0];
+    } else {
+      if (!t.isObjectExpression(objects[0])) {
+        objects.unshift(t.objectExpression([]));
+      }
 
-//       // spread it
-//       attributes = t.callExpression(helper, objects);
-//     }
+      const helper = useBuiltIns ?
+        t.memberExpression(t.identifier('Object'), t.identifier('assign')) :
+        file.addHelper('extends');
 
-//     return attributes;   
-//   }
+      // spread it
+      attributes = t.callExpression(helper, objects);
+    }
 
-//   return {
-//     exit: function (path) {
-//       var opening     = path.get('openingElement'); 
-//       var argument    = [];
-//       var attributes  = opening.node.attributes;
-//       var propExpr;
-//       var tagExpr;
-//       var callExpr;
-//       var tagName;
+    return attributes;   
+  }
 
-//       opening.parent.children = t.react.buildChildren(opening.parent);
-//       tagExpr              = toJSXIdentifier(opening.node.name, opening.node);
+  function isExistProperty (attributes) {
+    var isExist = attributes.some(function (attr) {
+      var node = attr.name;
+      var name = node.name;
+
+      if (name === '__viewid__') {
+        return true;
+      }
+    });
+
+    if (!isExist) {
+      attributes.push(
+        t.jSXAttribute(
+          t.jSXIdentifier(
+            '__viewid__'
+          ),
+          t.stringLiteral(String(vid.vid))
+        )
+      );
+    }
+  }
+
+  return {
+    exit: function (path) {
+      var opening     = path.get('openingElement'); 
+      var argument    = [];
+      var attributes  = opening.node.attributes;
+      var propExpr;
+      var tagExpr;
+      var callExpr;
+      var tag;
+
+      opening.parent.children = t.react.buildChildren(opening.parent);
+      tagExpr              = toJSXIdentifier(opening.node.name, opening.node);
       
-//       tagName = t.isIdentifier(tagExpr) ?
-//         tagExpr.name : tagExpr.value;
+      tag = t.isIdentifier(tagExpr) ?
+        tagExpr.name : tagExpr.value;
       
-//       argument.push(
-//         t.react.isCompatTag(tagName) ? 
-//           t.stringLiteral(tagName) : tagExpr
-//       );
+      argument.push(
+        t.react.isCompatTag(tag) ? 
+          t.stringLiteral(tag) : tagExpr
+      );
+
+      propExpr = attributes.length > 0 ? 
+        toJSXAttribute(attributes, file) : t.nullLiteral();
       
-//       propExpr = attributes.length > 0 ? 
-//         toJSXAttribute(attributes, file) : t.nullLiteral();
+      argument.push(
+        propExpr
+      );
 
-      
-//       argument.push(
-//         propExpr,
-//         t.arrayExpression(path.node.children)
-//       );
+      argument.push(
+        t.arrayExpression(path.node.children)
+      );
 
-//       tagExpr = t.callExpression(
-//         t.identifier('createElement'),
-//         argument
-//       );
+      tagExpr = t.callExpression(
+        t.identifier('createElement'),
+        argument
+      );
 
-//       path.replaceWith(
-//         t.inherits(
-//           tagExpr,
-//           path.node
-//         )
-//       );
-//     }
-//   }
-// }
+      path.replaceWith(
+        t.inherits(
+          tagExpr,
+          path.node
+        )
+      );
+    }
+  }
+}

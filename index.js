@@ -9,10 +9,7 @@ module.exports = function (source) {
   var sourcePath  = this.resourcePath;
   var compiler    = this._compiler;
   var options     = this.options;
-  var res         = ast(source);
-  var commonPath;
-  var complied;
-  var classes;
+  var meta        = ast(source);
   var output;
   var entry;
   var keys;
@@ -30,16 +27,15 @@ module.exports = function (source) {
     entry = path.relative(this.query.root, this.context);
   }
 
-  res.meta.filename = resource;
-  
-  compiled  = compile(res.meta, res.classes);
-  classes   = compiled.classes.all();
+  meta.filename = resource;
+  meta.dist = entry;
 
-  compiled.dist = entry;
+  console.log(this.resource);
+  console.log(meta.classes.all()[0])
 
-  classes.forEach((function (cls) {
-    builder.call(this, cls.value, compiled);
+  meta.classes.all().forEach((function (cls) {
+    builder.call(this, cls.value, meta);
   }).bind(this));
   
-  return compiled.code;
+  return meta.compiled;
 }

@@ -2,38 +2,30 @@ var path        = require('path');
 var babel       = require('babel-core');
 var fs          = require('fs');
 var Meta        = require('./meta-class');
-var classes     = new Meta.Node();
 
 module.exports = function (source) {
-  var res = singleFile(source);
-
-  return {
-    meta:     res,
-    classes:  classes
-  };
+  return singleFile(source);
 }
 
 function singleFile (file) {
   var plugins = [];
   var meta    = new Meta(file);
-  var complete;
+  var param   = {
+    meta: function () { return meta }
+  }
   
-  var visitorParam = {
-    complete:   complete,
-    getMeta:    function () {return meta;},
-    getClasses: function () {return classes;}
-  };
-
   plugins.push([
-    path.join(__dirname, './xml-visitor.js'), visitorParam
+    path.join(__dirname, './visitor.js'), 
+    param
   ]);
 
   var res = babel.transform(file, {
     presets: ['stage-0'],
-    plugins: plugins
+    plugins: plugins,
+    // sourceMap: 'inline'
   });
 
-  meta.code = res.code;
+  meta.compiled = res.code;
 
   return meta;
 }

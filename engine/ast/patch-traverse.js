@@ -1,25 +1,49 @@
-var eventName     = require('../tag/event');
+var tagName     = require('../tag/name');
 
 
-module.exports = function (path, state, t, meta, classes) {
-  return createVisitor(path, state, t, meta, classes);
+module.exports = function (path, state, t, meta) {
+  return createVisitor(path, state, t, meta);
 }
 
-function createVisitor(path, state, t, meta, classes) {
-  var file      = state.file;
-  var code      = file.code;
-
-  var argv = [meta, t, code, classes, path, state, file];
+function createVisitor(path, state, t, meta) {
+  var argv = [meta, t];
 
   return {
-    'ClassDeclaration':         classDeclaration.apply(null, argv) 
+    'ClassDeclaration':   classDeclaration.apply(null, argv)
   };
 }
 
+function jSXElement (cls, meta, t) {
+  return function (path) {
+    var node = path.get('openingElement').node;
+    var name = node.name.name;
+    var elements;
+    var attributes;
 
-function classDeclaration (meta, t, code, classes, path, state, file) {
+    if (!tagName[name]) {
+      if (node) {
+        attributes = node.attributes;
+
+        elements = cls.classEventMethods.all().map(function (node) {
+          return t.stringLiteral(node.value.value);
+        });
+
+        attributes.push(
+          t.jSXAttribute(
+            t.jSXIdentifier(
+              '__view_metods__'
+            ),
+            t.JSXExpressionContainer(t.arrayExpression(elements))
+          )
+        );
+      }
+    }
+  }
+}
+
+function classDeclaration (meta, t) {
   var argv = Array.prototype.slice.call(arguments);
-  
+
   function constructorMethod (body) {
     var node;
     var paramExpr;
@@ -84,16 +108,14 @@ function classDeclaration (meta, t, code, classes, path, state, file) {
 function classMethod (cls, meta, t) {
   var argv = arguments;
 
-  function classidMember (body) {
-    memberExpression(body, '__view_classid__', t.stringLiteral(cls.cid));
-  }
-
-  function eventMethodsMember (body) {
+  function methodsMember (body) {
     var elements = cls.classEventMethods.all().map(function (node) {
       return t.stringLiteral(node.value.value);
     });
 
-    memberExpression(body, '__view_events_methods__', t.arrayExpression(elements));
+    if (elements.length > 0) {
+      memberExpression(body, '__view_methods__', t.arrayExpression(elements));
+    }
   }
 
   function memberExpression (body, left, right) {
@@ -119,31 +141,6 @@ function classMethod (cls, meta, t) {
     body.push(exprStatement);
   }
 
-  function vnodeEventMethos (vnode) {
-    if (vnode) {
-      vnode.map(function (v) {
-        var props;
-        var viewid;
-
-        if (v.vtype < 11) {
-          props   = v.allProperties() || [];
-
-          if (props.length > 0) {
-            props.forEach(function (prop) {
-              var name      = prop.key;
-              var valueNode = prop.value;
-              var value     = valueNode.stringify();
-              
-              if (eventName[name]) {
-                valueNode.value.value = `${cls.cid}.{{__viewid__}}.${value}`;
-              }
-            });
-          }
-        }
-      });
-    }
-  }
-
   return function (path) {
     var node  = path.node;
     var body  = node.body.body;
@@ -152,9 +149,7 @@ function classMethod (cls, meta, t) {
     
     switch (name) {
       case 'constructor':
-        classidMember(body);
-        eventMethodsMember(body);
-        vnodeEventMethos(vnode);
+        methodsMember(body);
 
         break;
     }

@@ -38,6 +38,8 @@ module.exports = {
   'onConfirm':            'bindconfirm',
   'onLineChange':         'bindlinechange',
 
+  'onClick':            'bindtap',
+
   'touchStart':         'bindtouchstart',
   'touchMove':          'bindtouchmove',
   'touchCancel':        'bindtouchcancel',
