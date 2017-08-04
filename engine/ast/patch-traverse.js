@@ -97,7 +97,7 @@ function classDeclaration (meta, t) {
     var name = node.id.name;
     var cls  = meta.classes.get(name);
 
-    constructorMethod(node.body.body);
+    // constructorMethod(node.body.body);
     
     path.traverse({
       'ClassMethod': classMethod.apply(null, [cls].concat(argv))

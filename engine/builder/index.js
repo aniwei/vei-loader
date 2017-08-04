@@ -89,16 +89,16 @@ function fileForXML (cls, meta, loader) {
   var defaultClass = meta.exports.get('default');
   var filename     = defaultClass === cls.className ? 'index' : className;
 
-  loader.emitFile(
-    path.join(meta.dist, `${filename}.wxml`), 
-    vnodeString
-  );
-
   vnodeString = `<template name="${className}">${vnodeString}</template>`;
 
   loader.emitFile(
     path.join(meta.dist, `${filename}.view.wxml`), 
     vnodeString
+  );
+
+  loader.emitFile(
+    path.join(meta.dist, `${filename}.wxml`), 
+    `<import src="${filename}.view.wxml" /><template is="${className}" data="{{ name: 1 }}"></template>`
   );
 }
 
