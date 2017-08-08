@@ -1,41 +1,32 @@
-var path    = require('path');
-var ast     = require('./engine/ast/index.js');
-var compile = require('./engine/compile/index.js');
-var builder = require('./engine/builder/index.js');
+require('babel-register');
 
+var path    = require('path');
+var babel   = require('babel-core');
+var Meta    = require('./meta');
+var builder = require('./builder');
+var classes = new Meta.Node();
 
 module.exports = function (source) {
-  var resource    = this.resource;
-  var sourcePath  = this.resourcePath;
-  var compiler    = this._compiler;
-  var options     = this.options;
-  var meta        = ast(source);
-  var output;
-  var entry;
-  var keys;
-  
-  output      = compiler.outputPath;
-  keys        = Object.getOwnPropertyNames(options.entry);
-  
-  keys.some(function (key) {
-    if (options.entry[key] === sourcePath) {
-      return entry = key;
-    }
-  });
+  var meta        = new Meta();
+  var filename    = path.parse(this.resource);
 
-  if (!entry) {
-    entry = path.relative(this.query.root, this.context);
+  if (filename.ext === '.vx') {
+    var res = babel.transform(source, {
+      plugins: [
+        [
+          path.join(__dirname, 'visitors/index.js'),
+          { 
+            meta: () => { return meta },
+            classes: () => { return classes }
+          }
+        ]
+      ]
+    });
+
+    builder(meta, this._compilation.compiler, this);
+
+    return res.code;
   }
 
-  meta.filename = resource;
-  meta.dist = entry;
-
-  console.log(this.resource);
-  console.log(meta.classes.all()[0])
-
-  meta.classes.all().forEach((function (cls) {
-    builder.call(this, cls.value, meta);
-  }).bind(this));
-  
-  return meta.compiled;
+  return source;
 }
